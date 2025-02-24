@@ -1,68 +1,75 @@
 from flask import Flask, request, jsonify
-from flask_cors import CORS  # Import CORS
 import openai
 import logging
 import os
 
 app = Flask(__name__)
-CORS(app)  # Enable CORS for all routes
 
 # Configure logging
-logging.basicConfig(level=logging.INFO)
+logging.basicConfig(level=logging.INFO, format='%(asctime)s - %(levelname)s - %(message)s')
 
-# OpenAI API Key (ensure this is set in your Render environment)
-openai.api_key = os.getenv("OPENAI_API_KEY")
+# Load OpenAI API key from environment variable
+OPENAI_API_KEY = os.getenv("OPENAI_API_KEY")
+if not OPENAI_API_KEY:
+    raise ValueError("Missing OpenAI API Key")
+openai_client = openai.OpenAI(api_key=OPENAI_API_KEY)
 
-# Persona definitions
-personas = {
-    "CMO": "You are a Chief Marketing Officer with expertise in go-to-market strategies, pricing models, and brand positioning.",
-    "CTO": "You are a Chief Technology Officer experienced in technology feasibility, software development, and scaling infrastructure.",
-    "CFO": "You are a Chief Financial Officer skilled in financial modeling, fundraising, and business projections.",
-    "Legal Advisor": "You are a legal expert specializing in M&A transactions, startup legal structures, and compliance for fundraising.",
-    "Business Analyst": "You are a business analyst focused on competitive research, market trends, and industry positioning.",
-}
+# Define personas
+personas = [
+    {"name": "CMO", "role": "Chief Marketing Officer", "expertise": "go-to-market and pricing strategies"},
+    {"name": "CTO", "role": "Chief Technology Officer", "expertise": "technology feasibility and product development"},
+    {"name": "CFO", "role": "Chief Financial Officer", "expertise": "financial modeling and projections"},
+    {"name": "Legal Advisor", "role": "Legal Expert", "expertise": "M&A transactions and fundraising legal considerations"},
+    {"name": "Business Analyst", "role": "Market Analyst", "expertise": "competitive and market analysis"}
+]
+
+def generate_response(persona, business_idea):
+    """Generate a response from a persona based on the business idea."""
+    prompt = (
+        f"You are a {persona['role']} specializing in {persona['expertise']}. "
+        f"Provide insights on the following business idea: '{business_idea}'. "
+        f"Give a response and a score from 1-10 on feasibility and market potential."
+    )
+    
+    try:
+        response = openai_client.completions.create(
+            model="gpt-4-turbo",
+            messages=[{"role": "system", "content": prompt}],
+            max_tokens=200
+        )
+        text_response = response.choices[0].message.content.strip()
+        score = int(''.join(filter(str.isdigit, text_response[:3])) or 5)  # Extract first digit or default to 5
+        return text_response, min(max(score, 1), 10)  # Ensure score is within 1-10
+    except Exception as e:
+        logging.error(f"Error generating response: {e}")
+        return "Error generating response", 5
 
 @app.route("/ask", methods=["POST"])
-def ask_advisory_board():
-    """Handles business idea submission and returns persona-based insights."""
-    data = request.get_json()
-    business_idea = data.get("idea", "").strip()
-
-    if not business_idea:
-        return jsonify({"error": "No business idea provided"}), 400
-
-    responses = []
-    for role, description in personas.items():
-        prompt = f"{description}\n\nA startup founder submits this business idea:\n\n{business_idea}\n\nProvide your expert opinion, including key risks, opportunities, and a score from 1-10."
+def ask():
+    """Handles POST requests to generate responses from advisory board personas."""
+    try:
+        data = request.get_json()
+        logging.info(f"Received request data: {data}")
+        if not data:
+            return jsonify({"error": "No JSON data received"}), 400
         
-        try:
-            ai_response = openai.ChatCompletion.create(
-                model="gpt-4-turbo",
-                messages=[{"role": "system", "content": prompt}]
-            )
-            response_text = ai_response["choices"][0]["message"]["content"]
-            score = extract_score(response_text)  # Function to extract 1-10 score
-            
+        business_idea = data.get("business_idea")
+        if not business_idea:
+            return jsonify({"error": "No business idea provided"}), 400
+        
+        responses = []
+        for persona in personas:
+            response_text, score = generate_response(persona, business_idea)
             responses.append({
-                "persona": role,
+                "persona": persona["name"],
                 "response": response_text,
                 "score": score
             })
-
-            logging.info(f"{role} responded with score {score}: {response_text[:100]}...")
-
-        except Exception as e:
-            logging.error(f"Error generating response for {role}: {str(e)}")
-            responses.append({"persona": role, "response": "Error generating response.", "score": None})
-
-    return jsonify({"responses": responses})
-
-def extract_score(text):
-    """Extracts a 1-10 score from the AI response (simple heuristic)."""
-    import re
-    match = re.search(r"\b([1-9]|10)\b", text)
-    return int(match.group(1)) if match else None
+        
+        return jsonify(responses)
+    except Exception as e:
+        logging.error(f"Error in /ask endpoint: {e}")
+        return jsonify({"error": "Internal server error"}), 500
 
 if __name__ == "__main__":
-    port = int(os.environ.get("PORT", 5000))  # Default to 5000 if PORT not set
-    app.run(host="0.0.0.0", port=port, debug=True)
+    app.run(host="0.0.0.0", port=10000, debug=True)
