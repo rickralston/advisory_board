@@ -1,75 +1,83 @@
+import os
+import logging
 from flask import Flask, request, jsonify
 import openai
-import logging
-import os
 
-app = Flask(__name__)
-
-# Configure logging
+# Set up logging
 logging.basicConfig(level=logging.INFO, format='%(asctime)s - %(levelname)s - %(message)s')
 
-# Load OpenAI API key from environment variable
+# Load API key
 OPENAI_API_KEY = os.getenv("OPENAI_API_KEY")
 if not OPENAI_API_KEY:
-    raise ValueError("Missing OpenAI API Key")
+    logging.error("Missing OpenAI API Key!")
+    raise ValueError("OpenAI API Key is required.")
+
+# Initialize OpenAI client
 openai_client = openai.OpenAI(api_key=OPENAI_API_KEY)
 
-# Define personas
-personas = [
-    {"name": "CMO", "role": "Chief Marketing Officer", "expertise": "go-to-market and pricing strategies"},
-    {"name": "CTO", "role": "Chief Technology Officer", "expertise": "technology feasibility and product development"},
-    {"name": "CFO", "role": "Chief Financial Officer", "expertise": "financial modeling and projections"},
-    {"name": "Legal Advisor", "role": "Legal Expert", "expertise": "M&A transactions and fundraising legal considerations"},
-    {"name": "Business Analyst", "role": "Market Analyst", "expertise": "competitive and market analysis"}
-]
+# Flask app
+app = Flask(__name__)
 
-def generate_response(persona, business_idea):
-    """Generate a response from a persona based on the business idea."""
-    prompt = (
-        f"You are a {persona['role']} specializing in {persona['expertise']}. "
-        f"Provide insights on the following business idea: '{business_idea}'. "
-        f"Give a response and a score from 1-10 on feasibility and market potential."
-    )
-    
-    try:
-        response = openai_client.completions.create(
-            model="gpt-4-turbo",
-            messages=[{"role": "system", "content": prompt}],
-            max_tokens=200
-        )
-        text_response = response.choices[0].message.content.strip()
-        score = int(''.join(filter(str.isdigit, text_response[:3])) or 5)  # Extract first digit or default to 5
-        return text_response, min(max(score, 1), 10)  # Ensure score is within 1-10
-    except Exception as e:
-        logging.error(f"Error generating response: {e}")
-        return "Error generating response", 5
+# Persona definitions
+personas = {
+    "CMO": "Chief Marketing Officer with expertise in go-to-market and pricing strategies.",
+    "CTO": "Chief Technology Officer experienced in technology feasibility and product development timelines.",
+    "CFO": "Chief Financial Officer specializing in financial modeling and projections.",
+    "Legal Advisor": "Legal expert in M&A transactions and fundraising legal considerations.",
+    "Business Analyst": "Analyst focusing on competitive and market analysis."
+}
 
 @app.route("/ask", methods=["POST"])
-def ask():
-    """Handles POST requests to generate responses from advisory board personas."""
+def ask_advisory_board():
     try:
         data = request.get_json()
-        logging.info(f"Received request data: {data}")
-        if not data:
-            return jsonify({"error": "No JSON data received"}), 400
+        logging.info("Received request data: %s", data)
         
         business_idea = data.get("business_idea")
         if not business_idea:
+            logging.error("No business idea provided.")
             return jsonify({"error": "No business idea provided"}), 400
         
         responses = []
-        for persona in personas:
-            response_text, score = generate_response(persona, business_idea)
-            responses.append({
-                "persona": persona["name"],
-                "response": response_text,
-                "score": score
-            })
+        for persona, description in personas.items():
+            try:
+                prompt = (
+                    f"You are a {description} Provide feedback on the following business idea: {business_idea}. "
+                    "Give your perspective, identify key challenges, and rate its potential on a scale of 1-10."
+                )
+                
+                response = openai_client.completions.create(
+                    model="gpt-4o",  # Ensure the correct model name is used
+                    prompt=prompt,
+                    max_tokens=200
+                )
+                
+                ai_response = response.choices[0].text.strip()
+                rating = extract_rating(ai_response)
+                responses.append({
+                    "persona": persona,
+                    "response": ai_response,
+                    "score": rating
+                })
+                
+            except Exception as e:
+                logging.error("Error generating response for %s: %s", persona, str(e))
+                responses.append({
+                    "persona": persona,
+                    "response": "Error generating response.",
+                    "score": None
+                })
         
-        return jsonify(responses)
+        return jsonify({"responses": responses})
+    
     except Exception as e:
-        logging.error(f"Error in /ask endpoint: {e}")
+        logging.error("Unexpected error: %s", str(e))
         return jsonify({"error": "Internal server error"}), 500
+
+def extract_rating(response_text):
+    import re
+    match = re.search(r'\b([1-9]|10)\b', response_text)
+    return int(match.group(0)) if match else None
 
 if __name__ == "__main__":
     app.run(host="0.0.0.0", port=10000, debug=True)
