@@ -6,13 +6,15 @@ import openai
 app = Flask(__name__)
 
 # Configure logging
-logging.basicConfig(level=logging.INFO, format='%(asctime)s - %(levelname)s - %(message)s')
+logging.basicConfig(level=logging.INFO, format="%(asctime)s - %(levelname)s - %(message)s")
 
 # Load API key
 OPENAI_API_KEY = os.getenv("OPENAI_API_KEY")
 if not OPENAI_API_KEY:
     raise ValueError("Missing OpenAI API key. Set the OPENAI_API_KEY environment variable.")
-openai.api_key = OPENAI_API_KEY
+
+# Initialize OpenAI client
+client = openai.OpenAI(api_key=OPENAI_API_KEY)
 
 # Define AI personas
 personas = {
@@ -25,30 +27,34 @@ personas = {
 
 @app.route("/ask", methods=["POST"])
 def ask():
+    """Handles incoming business idea queries and returns AI-generated insights from different personas."""
     data = request.get_json()
+    
     if not data or "business_idea" not in data:
+        logging.warning("Received invalid request: Missing business idea.")
         return jsonify({"error": "No business idea provided"}), 400
     
     business_idea = data["business_idea"]
-    logging.info(f"Received request data: {data}")
+    logging.info(f"Received business idea: {business_idea}")
     
     responses = {}
+
     for role, prompt_intro in personas.items():
         messages = [
             {"role": "system", "content": prompt_intro},
             {"role": "user", "content": f"Business Idea: {business_idea}. What are your thoughts?"}
         ]
         try:
-            response = openai.ChatCompletion.create(
-                model="gpt-4o",  # Change model as needed
+            response = client.chat.completions.create(
+                model="gpt-4o",  # Ensure model is correct
                 messages=messages
             )
-            responses[role] = response["choices"][0]["message"]["content"]
+            responses[role] = response.choices[0].message.content
         except Exception as e:
-            logging.error(f"Error generating response for {role}: {str(e)}")
+            logging.error(f"Error generating response for {role}: {str(e)}", exc_info=True)
             responses[role] = "Error generating response."
     
     return jsonify(responses)
 
 if __name__ == "__main__":
-    app.run(host="0.0.0.0", port=10000, debug=True)
+    app.run(host="0.0.0.0", port=10000)
