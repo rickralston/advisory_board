@@ -46,7 +46,7 @@ def ask():
         ]
         try:
             response = client.chat.completions.create(
-                model="gpt-4-turbo",  # Ensure model is correct
+                model="gpt-4o",  # Ensure model is correct
                 messages=messages
             )
             responses[role] = response.choices[0].message.content
