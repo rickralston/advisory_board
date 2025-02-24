@@ -1,20 +1,22 @@
 import os
 import logging
-from flask import Flask, request, jsonify
+import asyncio
 import openai
+from flask import Flask, request, jsonify
+from openai import AsyncOpenAI
 
 app = Flask(__name__)
 
 # Configure logging
-logging.basicConfig(level=logging.INFO, format="%(asctime)s - %(levelname)s - %(message)s")
+logging.basicConfig(level=logging.INFO, format='%(asctime)s - %(levelname)s - %(message)s')
 
 # Load API key
 OPENAI_API_KEY = os.getenv("OPENAI_API_KEY")
 if not OPENAI_API_KEY:
     raise ValueError("Missing OpenAI API key. Set the OPENAI_API_KEY environment variable.")
 
-# Initialize OpenAI client
-client = openai.OpenAI(api_key=OPENAI_API_KEY)
+# Initialize OpenAI async client
+client = AsyncOpenAI(api_key=OPENAI_API_KEY)
 
 # Define AI personas
 personas = {
@@ -25,36 +27,36 @@ personas = {
     "Business Analyst": "You are a Business Analyst. Conduct market and competitive analysis."
 }
 
+async def generate_response(role, prompt_intro, business_idea):
+    """Generate response from OpenAI asynchronously."""
+    messages = [
+        {"role": "system", "content": prompt_intro},
+        {"role": "user", "content": f"Business Idea: {business_idea}. What are your thoughts?"}
+    ]
+    try:
+        response = await client.chat.completions.create(
+            model="gpt-4o",  # Change model as needed
+            messages=messages
+        )
+        return role, response.choices[0].message.content
+    except Exception as e:
+        logging.error(f"Error generating response for {role}: {str(e)}")
+        return role, "Error generating response."
+
 @app.route("/ask", methods=["POST"])
-def ask():
-    """Handles incoming business idea queries and returns AI-generated insights from different personas."""
+async def ask():
     data = request.get_json()
-    
     if not data or "business_idea" not in data:
-        logging.warning("Received invalid request: Missing business idea.")
         return jsonify({"error": "No business idea provided"}), 400
     
     business_idea = data["business_idea"]
     logging.info(f"Received business idea: {business_idea}")
     
-    responses = {}
-
-    for role, prompt_intro in personas.items():
-        messages = [
-            {"role": "system", "content": prompt_intro},
-            {"role": "user", "content": f"Business Idea: {business_idea}. What are your thoughts?"}
-        ]
-        try:
-            response = client.chat.completions.create(
-                model="gpt-4o",  # Ensure model is correct
-                messages=messages
-            )
-            responses[role] = response.choices[0].message.content
-        except Exception as e:
-            logging.error(f"Error generating response for {role}: {str(e)}", exc_info=True)
-            responses[role] = "Error generating response."
+    # Run all persona requests concurrently
+    tasks = [generate_response(role, prompt, business_idea) for role, prompt in personas.items()]
+    responses = await asyncio.gather(*tasks)
     
-    return jsonify(responses)
+    return jsonify(dict(responses))
 
 if __name__ == "__main__":
-    app.run(host="0.0.0.0", port=10000)
+    app.run(host="0.0.0.0", port=10000, debug=True)
