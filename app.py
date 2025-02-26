@@ -5,6 +5,9 @@ import supabase
 from flask import Flask, request, jsonify
 from flask_cors import CORS
 from openai import AsyncOpenAI
+from functools import wraps
+import jwt
+from datetime import datetime, timedelta
 
 app = Flask(__name__)
 CORS(app)
@@ -12,18 +15,37 @@ CORS(app)
 # Configure logging
 logging.basicConfig(level=logging.INFO, format="%(asctime)s - %(levelname)s - %(message)s")
 
-# Load API key
+# Load API keys and Supabase credentials
 OPENAI_API_KEY = os.getenv("OPENAI_API_KEY")
 SUPABASE_URL = os.getenv("SUPABASE_URL")
 SUPABASE_KEY = os.getenv("SUPABASE_KEY")
+JWT_SECRET = os.getenv("JWT_SECRET")  # Used for signing authentication tokens
 
-if not OPENAI_API_KEY or not SUPABASE_URL or not SUPABASE_KEY:
-    raise ValueError("Missing environment variables. Set OPENAI_API_KEY, SUPABASE_URL, and SUPABASE_KEY.")
+if not OPENAI_API_KEY or not SUPABASE_URL or not SUPABASE_KEY or not JWT_SECRET:
+    raise ValueError("Missing environment variables. Ensure OPENAI_API_KEY, SUPABASE_URL, SUPABASE_KEY, and JWT_SECRET are set.")
 
 client = AsyncOpenAI(api_key=OPENAI_API_KEY)
 
 # Connect to Supabase
 supabase_client = supabase.create_client(SUPABASE_URL, SUPABASE_KEY)
+
+def token_required(f):
+    """Decorator to verify JWT token."""
+    @wraps(f)
+    def decorated_function(*args, **kwargs):
+        token = request.headers.get("Authorization")
+        if not token:
+            return jsonify({"error": "Token is missing"}), 401
+        try:
+            token = token.split("Bearer ")[-1]  # Extract token
+            decoded = jwt.decode(token, JWT_SECRET, algorithms=["HS256"])
+            request.user = decoded  # Store user info in request
+        except jwt.ExpiredSignatureError:
+            return jsonify({"error": "Token expired"}), 401
+        except jwt.InvalidTokenError:
+            return jsonify({"error": "Invalid token"}), 401
+        return f(*args, **kwargs)
+    return decorated_function
 
 # Define AI personas
 personas = {
@@ -35,6 +57,7 @@ personas = {
 }
 
 @app.route("/ask", methods=["POST"])
+@token_required  # Require authentication
 async def ask():
     data = request.get_json()
     if not data or "business_idea" not in data:
