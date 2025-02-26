@@ -7,7 +7,7 @@ from openai import AsyncOpenAI
 
 app = Flask(__name__)
 
-CORS(app, origins=["https://your-netlify-site.netlify.app"])
+CORS(app)
 
 # Configure logging
 logging.basicConfig(level=logging.INFO, format='%(asctime)s - %(levelname)s - %(message)s')
