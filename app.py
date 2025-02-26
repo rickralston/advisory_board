@@ -1,12 +1,12 @@
 import os
 import logging
 import asyncio
+import supabase
 from flask import Flask, request, jsonify
 from flask_cors import CORS
 from openai import AsyncOpenAI
 
 app = Flask(__name__)
-
 CORS(app)
 
 # Configure logging
@@ -14,9 +14,16 @@ logging.basicConfig(level=logging.INFO, format="%(asctime)s - %(levelname)s - %(
 
 # Load API key
 OPENAI_API_KEY = os.getenv("OPENAI_API_KEY")
-if not OPENAI_API_KEY:
-    raise ValueError("Missing OpenAI API key. Set the OPENAI_API_KEY environment variable.")
+SUPABASE_URL = os.getenv("SUPABASE_URL")
+SUPABASE_KEY = os.getenv("SUPABASE_KEY")
+
+if not OPENAI_API_KEY or not SUPABASE_URL or not SUPABASE_KEY:
+    raise ValueError("Missing environment variables. Set OPENAI_API_KEY, SUPABASE_URL, and SUPABASE_KEY.")
+
 client = AsyncOpenAI(api_key=OPENAI_API_KEY)
+
+# Connect to Supabase
+supabase_client = supabase.create_client(SUPABASE_URL, SUPABASE_KEY)
 
 # Define AI personas
 personas = {
