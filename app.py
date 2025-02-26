@@ -2,9 +2,12 @@ import os
 import logging
 import asyncio
 from flask import Flask, request, jsonify
+from flask_cors import CORS
 from openai import AsyncOpenAI
 
 app = Flask(__name__)
+
+CORS(app, origins=["https://your-netlify-site.netlify.app"])
 
 # Configure logging
 logging.basicConfig(level=logging.INFO, format='%(asctime)s - %(levelname)s - %(message)s')
