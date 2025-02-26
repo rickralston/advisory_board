@@ -1,3 +1,4 @@
 flask[async]
 flask-cors
 openai[async]
+supabase
