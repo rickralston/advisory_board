@@ -106,7 +106,7 @@ def ask():
             return "Error generating response."
 
     # Run async functions synchronously
-    responses = asyncio.run(asyncio.gather(*[get_response(role, prompt) for role, prompt in personas.items()]))
+    responses = await asyncio.gather(*[get_response(role, prompt) for role, prompt in personas.items()])
     response_dict = dict(zip(personas.keys(), responses))
 
     # Extract scores and calculate total
