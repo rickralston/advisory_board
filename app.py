@@ -48,6 +48,24 @@ def token_required(f):
         return f(*args, **kwargs)
     return decorated_function
 
+# ✅ NEW: Simple Login Route to Generate JWT Token
+@app.route("/login", methods=["POST"])
+def login():
+    data = request.get_json()
+    username = data.get("username")
+    password = data.get("password")
+
+    # 🔹 Temporary Hardcoded Credentials (Replace with Database Check Later)
+    if username == "admin" and password == "password123":
+        token = jwt.encode(
+            {"user": username, "exp": datetime.utcnow() + timedelta(hours=1)},
+            JWT_SECRET,
+            algorithm="HS256"
+        )
+        return jsonify({"token": token})
+
+    return jsonify({"error": "Invalid credentials"}), 401
+
 # Define AI personas
 personas = {
     "CMO": "You are a Chief Marketing Officer. Provide insights on go-to-market strategy and pricing. Start your response with a score from 1 through 10, indicating the strength of the idea from a marketing perspective. Start your response with only the number 1 through 10, followed immediately by a single newline (\n). Do not include any extra spaces, words, multiple newlines, or formatting before or after the number.",
@@ -56,8 +74,6 @@ personas = {
     "Legal Advisor": "You are a Legal Advisor. Assess legal considerations for fundraising and M&A. Start your response with a score from 1 through 10, indicating legal feasibility. Start your response with only the number 1 through 10, followed immediately by a single newline (\n). Do not include any extra spaces, words, multiple newlines, or formatting before or after the number.",
     "Business Analyst": "You are a Business Analyst. Conduct market and competitive analysis. Start your response with a score from 1 through 10, indicating market potential. Start your response with only the number 1 through 10, followed immediately by a single newline (\n). Do not include any extra spaces, words, multiple newlines, or formatting before or after the number."
 }
-
-# Enable CORS for the whole app
 
 @app.route("/ask", methods=["POST", "OPTIONS"])
 @cross_origin()  # Allow frontend to make requests
