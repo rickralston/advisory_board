@@ -8,6 +8,7 @@ from openai import AsyncOpenAI
 from functools import wraps
 import jwt
 from datetime import datetime, timedelta
+from flask_cors import cross_origin
 
 app = Flask(__name__)
 CORS(app)
@@ -56,9 +57,16 @@ personas = {
     "Business Analyst": "You are a Business Analyst. Conduct market and competitive analysis. Start your response with a score from 1 through 10, indicating market potential. Start your response with only the number 1 through 10, followed immediately by a single newline (\n). Do not include any extra spaces, words, multiple newlines, or formatting before or after the number."
 }
 
-@app.route("/ask", methods=["POST"])
+# Enable CORS for the whole app
+
+@app.route("/ask", methods=["POST", "OPTIONS"])
+@cross_origin()  # Allow frontend to make requests
 @token_required  # Require authentication
 async def ask():
+    if request.method == "OPTIONS":
+        # Respond to preflight requests with necessary CORS headers
+        return jsonify({"message": "CORS preflight successful"}), 200
+
     data = request.get_json()
     if not data or "business_idea" not in data:
         return jsonify({"error": "No business idea provided"}), 400
