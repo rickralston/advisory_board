@@ -78,9 +78,8 @@ personas = {
 @app.route("/ask", methods=["POST", "OPTIONS"])
 @cross_origin()  # Allow frontend to make requests
 @token_required  # Require authentication
-async def ask():
+def ask():
     if request.method == "OPTIONS":
-        # Respond to preflight requests with necessary CORS headers
         return jsonify({"message": "CORS preflight successful"}), 200
 
     data = request.get_json()
@@ -96,31 +95,30 @@ async def ask():
             {"role": "user", "content": f"Business Idea: {business_idea}. What are your thoughts? Keep your response concise."}
         ]
         try:
-            response = await client.chat.completions.create(
+            response = client.chat.completions.create(
                 model="gpt-4o",
                 messages=messages,
-                max_tokens=300  # Limit response length
+                max_tokens=300
             )
             return response.choices[0].message.content
         except Exception as e:
             logging.error(f"Error generating response for {role}: {str(e)}")
             return "Error generating response."
 
-    # Gather responses from all personas
-    responses = await asyncio.gather(*[get_response(role, prompt) for role, prompt in personas.items()])
+    # Run async functions synchronously
+    responses = asyncio.run(asyncio.gather(*[get_response(role, prompt) for role, prompt in personas.items()]))
     response_dict = dict(zip(personas.keys(), responses))
 
-    # Extract scores and calculate average
+    # Extract scores and calculate total
     try:
         scores = [int(response.split("\n")[0]) for response in response_dict.values()]
-        total_score = round(sum(scores) / len(scores), 1)  # Average with one decimal place
+        total_score = round(sum(scores) / len(scores), 1)
     except Exception as e:
         logging.error(f"Error calculating total score: {str(e)}")
         total_score = "N/A"
 
-    # Add total score to response
     response_dict["Total Score"] = str(total_score)
-
+    
     return jsonify(response_dict)
 
 if __name__ == "__main__":
