@@ -39,7 +39,7 @@ def signup():
     """User signup using Supabase Auth"""
     data = request.get_json()
 
-    email = data.get("email", "").strip().lower()  # Strip spaces and force lowercase
+    email = data.get("email", "").strip().lower()  # Normalize email
     password = data.get("password", "").strip()
 
     if not email or not password:
@@ -49,25 +49,21 @@ def signup():
     if "@" not in email or "." not in email:
         return jsonify({"error": "Invalid email format"}), 400
 
-    # Check if user already exists
     try:
-        existing_user = supabase.auth.sign_in_with_password(
-            {"email": email, "password": password}
-        )
-        if existing_user:
-            return jsonify({"error": "User already exists"}), 400
-    except Exception:
-        pass  # Ignore error if user does not exist
-
-    # Sign up user
-    try:
+        # Attempt to create the user
         user = supabase.auth.sign_up({"email": email, "password": password})
-        return jsonify(
-            {"message": "User created successfully", "user_id": user.user.id}
-        ), 201
+
+        if user and user.user:
+            return jsonify(
+                {"message": "User created successfully", "user_id": user.user.id}
+            ), 201
+
+        return jsonify({"error": "User creation failed"}), 500
+
     except Exception as e:
         logging.error(f"Signup error: {e}")
         return jsonify({"error": str(e)}), 500
+
 
 
 @auth_bp.route("/login", methods=["POST"])
