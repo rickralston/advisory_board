@@ -50,6 +50,24 @@ def token_required(f):
         return f(*args, **kwargs)
     return decorated_function
 
+# --- ADD THIS: LOGIN ROUTE ---
+@app.route("/login", methods=["POST"])
+def login():
+    data = request.get_json()
+    if not data or "username" not in data or "password" not in data:
+        return jsonify({"error": "Username and password required"}), 400
+
+    username = data["username"]
+    password = data["password"]
+
+    # For simplicity, replace this with a real user authentication check
+    if username == "testuser" and password == "testpassword":
+        expiration = datetime.utcnow() + timedelta(hours=1)
+        token = jwt.encode({"user": username, "exp": expiration}, JWT_SECRET, algorithm="HS256")
+        return jsonify({"token": token})
+
+    return jsonify({"error": "Invalid credentials"}), 401
+
 # Define AI personas
 personas = {
     "CMO": "You are a Chief Marketing Officer. Provide insights on go-to-market strategy and pricing. Start your response with a score from 1 through 10, indicating the strength of the idea from a marketing perspective. Start your response with only the number 1 through 10, followed immediately by a single newline (\n). Do not include any extra spaces, words, multiple newlines, or formatting before or after the number.",
