@@ -61,7 +61,9 @@ def signup():
     except Exception as e:
         logging.error(f"Signup error: {e}")
         return jsonify({"error": str(e)}), 500
-
+        
+# Insert user into database after signup
+supabase.table("users").insert({"id": user.user.id, "email": email}).execute()
 
 @auth_bp.route("/login", methods=["POST"])
 def login():
