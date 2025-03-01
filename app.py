@@ -51,22 +51,21 @@ def token_required(f):
     return decorated_function
 
 # --- ADD THIS: LOGIN ROUTE ---
-@app.route("/login", methods=["POST"])
+@app.route('/login', methods=['POST'])
 def login():
     data = request.get_json()
-    if not data or "username" not in data or "password" not in data:
-        return jsonify({"error": "Username and password required"}), 400
+    username = data.get("username")
+    password = data.get("password")  # Replace with real authentication
 
-    username = data["username"]
-    password = data["password"]
+    # Dummy authentication (replace with database verification)
+    if username != "admin" or password != "password":
+        return jsonify({"error": "Invalid credentials"}), 401
 
-    # For simplicity, replace this with a real user authentication check
-    if username == "testuser" and password == "testpassword":
-        expiration = datetime.utcnow() + timedelta(hours=1)
-        token = jwt.encode({"user": username, "exp": expiration}, JWT_SECRET, algorithm="HS256")
-        return jsonify({"token": token})
+    # Generate a token valid for 1 hour
+    expiration = datetime.utcnow() + timedelta(hours=1)
+    token = jwt.encode({"user": username, "exp": expiration}, JWT_SECRET, algorithm="HS256")
 
-    return jsonify({"error": "Invalid credentials"}), 401
+    return jsonify({"token": token})
 
 # Define AI personas
 personas = {
