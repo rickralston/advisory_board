@@ -50,6 +50,10 @@ def token_required(f):
         return f(*args, **kwargs)
     return decorated_function
 
+@app.route("/time", methods=["GET"])
+def get_server_time():
+    return jsonify({"server_time": datetime.utcnow().isoformat()})
+
 # --- ADD THIS: LOGIN ROUTE ---
 @app.route('/login', methods=['POST'])
 def login():
