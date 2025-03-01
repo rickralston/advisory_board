@@ -2,6 +2,7 @@ import os
 import asyncio
 import logging
 import bcrypt
+import supabase
 from flask import Flask, request, jsonify
 from flask_cors import CORS
 from flask_jwt_extended import JWTManager, jwt_required, create_access_token, get_jwt_identity
@@ -17,6 +18,11 @@ jwt = JWTManager(app)
 
 # Initialize OpenAI client
 openai_client = AsyncOpenAI(api_key=os.getenv("OPENAI_API_KEY"))
+
+# Configure Supabase client
+supabase_url = os.getenv("SUPABASE_URL")
+supabase_key = os.getenv("SUPABASE_KEY")
+supa_client = supabase.create_client(supabase_url, supabase_key)
 
 # Configure logging
 logging.basicConfig(level=logging.INFO)
@@ -46,15 +52,42 @@ async def get_response(role, prompt):
         logging.error(f"Error fetching response for {role}: {e}")
         return {"role": role, "response": "Error generating response."}
 
+@app.route('/register', methods=['POST'])
+def register():
+    """Register a new user."""
+    data = request.json
+    username = data.get("username")
+    password = data.get("password")
+    if not username or not password:
+        return jsonify({"error": "Username and password are required."}), 400
+    
+    hashed_password = bcrypt.hashpw(password.encode('utf-8'), bcrypt.gensalt()).decode('utf-8')
+    response = supa_client.table("users").insert({"username": username, "password": hashed_password}).execute()
+    if response[1]:
+        return jsonify({"error": "Error creating user."}), 500
+    
+    return jsonify({"message": "User registered successfully."}), 201
+
 @app.route('/login', methods=['POST'])
 def login():
     """Authenticate user and return JWT token."""
-    username = request.json.get("username")
-    password = request.json.get("password")
-    if username == "test" and password == "password":
-        access_token = create_access_token(identity=username)
-        return jsonify(access_token=access_token), 200
-    return jsonify({"error": "Invalid credentials"}), 401
+    data = request.json
+    username = data.get("username")
+    password = data.get("password")
+    if not username or not password:
+        return jsonify({"error": "Username and password are required."}), 400
+    
+    response = supa_client.table("users").select("password").eq("username", username).execute()
+    user_data = response[1]
+    if not user_data:
+        return jsonify({"error": "Invalid credentials."}), 401
+    
+    stored_password = user_data[0]['password']
+    if not bcrypt.checkpw(password.encode('utf-8'), stored_password.encode('utf-8')):
+        return jsonify({"error": "Invalid credentials."}), 401
+    
+    access_token = create_access_token(identity=username)
+    return jsonify(access_token=access_token), 200
 
 @app.route('/ask', methods=['POST'])
 @jwt_required()
