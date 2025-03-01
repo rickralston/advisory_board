@@ -52,11 +52,11 @@ def token_required(f):
 
 # Define AI personas
 personas = {
-    "CMO": "You are a Chief Marketing Officer. Provide insights on go-to-market strategy and pricing.",
-    "CTO": "You are a Chief Technology Officer. Evaluate technical feasibility and development timelines.",
-    "CFO": "You are a Chief Financial Officer. Analyze financial projections and funding requirements.",
-    "Legal Advisor": "You are a Legal Advisor. Assess legal considerations for fundraising and M&A.",
-    "Business Analyst": "You are a Business Analyst. Conduct market and competitive analysis."
+    "CMO": "You are a Chief Marketing Officer. Provide insights on go-to-market strategy and pricing. Start your response with a score from 1 through 10, indicating the strength of the idea from a marketing perspective. Start your response with only the number 1 through 10, followed immediately by a single newline (\n). Do not include any extra spaces, words, multiple newlines, or formatting before or after the number.",
+    "CTO": "You are a Chief Technology Officer. Evaluate technical feasibility and development timelines. Start your response with a score from 1 through 10, indicating the technical feasibility. Start your response with only the number 1 through 10, followed immediately by a single newline (\n). Do not include any extra spaces, words, multiple newlines, or formatting before or after the number.",
+    "CFO": "You are a Chief Financial Officer. Analyze financial projections and funding requirements. Start your response with a score from 1 through 10, indicating financial viability. Start your response with only the number 1 through 10, followed immediately by a single newline (\n). Do not include any extra spaces, words, multiple newlines, or formatting before or after the number.",
+    "Legal Advisor": "You are a Legal Advisor. Assess legal considerations for fundraising and M&A. Start your response with a score from 1 through 10, indicating legal feasibility. Start your response with only the number 1 through 10, followed immediately by a single newline (\n). Do not include any extra spaces, words, multiple newlines, or formatting before or after the number.",
+    "Business Analyst": "You are a Business Analyst. Conduct market and competitive analysis. Start your response with a score from 1 through 10, indicating market potential. Start your response with only the number 1 through 10, followed immediately by a single newline (\n). Do not include any extra spaces, words, multiple newlines, or formatting before or after the number."
 }
 
 @app.route("/ask", methods=["POST"])
