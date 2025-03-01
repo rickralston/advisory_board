@@ -1,99 +1,24 @@
 import os
-import logging
 import asyncio
-import supabase
-from flask import Flask, request, jsonify, g
+import logging
+from flask import Flask, request, jsonify
 from flask_cors import CORS
+from flask_jwt_extended import JWTManager, jwt_required, create_access_token, get_jwt_identity
 from openai import AsyncOpenAI
-from functools import wraps
-import jwt
-import re
-from datetime import datetime, timedelta
+from datetime import timedelta
 
+# Initialize Flask app
 app = Flask(__name__)
 CORS(app)
+app.config['JWT_SECRET_KEY'] = os.getenv('JWT_SECRET_KEY', 'your_default_secret_key')
+app.config['JWT_ACCESS_TOKEN_EXPIRES'] = timedelta(days=1)
+jwt = JWTManager(app)
+
+# Initialize OpenAI client
+openai_client = AsyncOpenAI(api_key=os.getenv("OPENAI_API_KEY"))
 
 # Configure logging
-logging.basicConfig(level=logging.INFO, format="%(asctime)s - %(levelname)s - %(message)s")
-
-# Load API keys and Supabase credentials
-OPENAI_API_KEY = os.getenv("OPENAI_API_KEY")
-SUPABASE_URL = os.getenv("SUPABASE_URL")
-SUPABASE_KEY = os.getenv("SUPABASE_KEY")
-JWT_SECRET = os.getenv("JWT_SECRET")  # Used for signing authentication tokens
-
-if not OPENAI_API_KEY or not SUPABASE_URL or not SUPABASE_KEY or not JWT_SECRET:
-    raise ValueError("Missing environment variables. Ensure OPENAI_API_KEY, SUPABASE_URL, SUPABASE_KEY, and JWT_SECRET are set.")
-
-client = AsyncOpenAI(api_key=OPENAI_API_KEY)
-
-# Connect to Supabase
-supabase_client = supabase.create_client(SUPABASE_URL, SUPABASE_KEY)
-
-def token_required(f):
-    """Decorator to verify JWT token."""
-    @wraps(f)
-    def decorated_function(*args, **kwargs):
-        token = request.headers.get("Authorization")
-        if not token or not token.startswith("Bearer "):
-            return jsonify({"error": "Token is missing or invalid"}), 401
-        
-        try:
-            token = token.split("Bearer ")[-1]  # Extract token
-            decoded = jwt.decode(token, JWT_SECRET, algorithms=["HS256"])
-            g.user = decoded  # Store user info globally
-        except jwt.ExpiredSignatureError:
-            return jsonify({"error": "Token expired"}), 401
-        except jwt.InvalidTokenError:
-            return jsonify({"error": "Invalid token"}), 401
-        
-        return f(*args, **kwargs)
-    return decorated_function
-
-@app.route("/debug-token", methods=["POST"])
-def debug_token():
-    token = request.json.get("token")  # Pass the token in the request body
-    if not token:
-        return jsonify({"error": "No token provided"}), 400
-
-    try:
-        decoded = jwt.decode(token, JWT_SECRET, algorithms=["HS256"])
-        server_time = datetime.utcnow()
-        token_exp_time = datetime.utcfromtimestamp(decoded["exp"])
-        return jsonify({
-            "server_time": server_time.isoformat(),
-            "token_expiration_time": token_exp_time.isoformat(),
-            "is_expired": server_time > token_exp_time
-        })
-    except jwt.ExpiredSignatureError:
-        return jsonify({"error": "Token expired"}), 401
-    except jwt.InvalidTokenError:
-        return jsonify({"error": "Invalid token"}), 401
-
-@app.route("/time", methods=["GET"])
-def get_server_time():
-    return jsonify({"server_time": datetime.utcnow().isoformat()})
-
-# --- ADD THIS: LOGIN ROUTE ---
-@app.route('/login', methods=['POST'])
-def login():
-    data = request.get_json()
-    username = data.get("username")
-    password = data.get("password")  # Replace with real authentication
-
-    # Dummy authentication (replace with database verification)
-    if username != "admin" or password != "password":
-        return jsonify({"error": "Invalid credentials"}), 401
-
-    # Generate a token valid for 1 hour
-exp_time = datetime.utcnow() + timedelta(hours=1)  # Always use UTC
-token = jwt.encode({"exp": exp_time.timestamp()}, JWT_SECRET, algorithm="HS256")
-
-server_time = datetime.utcnow()  # Always use UTC
-token_exp_time = datetime.utcfromtimestamp(decoded["exp"])  # Convert exp to UTC
-
-if server_time > token_exp_time:
-    return jsonify({"error": "Token expired"}), 401
+logging.basicConfig(level=logging.INFO)
 
 # Define AI personas
 personas = {
@@ -104,49 +29,45 @@ personas = {
     "Business Analyst": "You are a Business Analyst. Conduct market and competitive analysis. Start your response with a score from 1 through 10, indicating market potential. Start your response with only the number 1 through 10, followed immediately by a single newline (\n). Do not include any extra spaces, words, multiple newlines, or formatting before or after the number."
 }
 
-@app.route("/ask", methods=["POST"])
-@token_required  # Require authentication
+async def get_response(role, prompt):
+    """Asynchronously fetch responses from OpenAI."""
+    try:
+        response = await openai_client.chat.completions.create(
+            model="gpt-4-turbo",
+            messages=[
+                {"role": "system", "content": prompt},
+                {"role": "user", "content": role}
+            ],
+            max_tokens=300
+        )
+        return {"role": role, "response": response.choices[0].message.content.strip()}
+    except Exception as e:
+        logging.error(f"Error fetching response for {role}: {e}")
+        return {"role": role, "response": "Error generating response."}
+
+@app.route('/login', methods=['POST'])
+def login():
+    """Authenticate user and return JWT token."""
+    username = request.json.get("username")
+    password = request.json.get("password")
+    if username == "test" and password == "password":
+        access_token = create_access_token(identity=username)
+        return jsonify(access_token=access_token), 200
+    return jsonify({"error": "Invalid credentials"}), 401
+
+@app.route('/ask', methods=['POST'])
+@jwt_required()
 async def ask():
-    data = request.get_json()
-    if not data or "business_idea" not in data:
-        return jsonify({"error": "No business idea provided"}), 400
-
-    business_idea = data["business_idea"]
-    logging.info(f"Received business idea: {business_idea}")
-
-    async def get_response(role, prompt_intro):
-        messages = [
-            {"role": "system", "content": prompt_intro},
-            {"role": "user", "content": f"Business Idea: {business_idea}. Provide a concise evaluation. "
-                                        f"Start with a score from 1 to 10 on a new line."}
-        ]
-        try:
-            response = await client.chat.completions.create(
-                model="gpt-4o",
-                messages=messages,
-                max_tokens=200  # More concise response
-            )
-            return response.choices[0].message.content
-        except Exception as e:
-            logging.error(f"Error generating response for {role}: {str(e)}")
-            return "Error generating response."
-
-    # Gather responses from all personas
-    responses = await asyncio.gather(*[get_response(role, prompt) for role, prompt in personas.items()])
-    response_dict = dict(zip(personas.keys(), responses))
-
-    # Extract scores using regex (handles malformed responses)
-    def extract_score(response):
-        match = re.match(r"^\s*(\d+)", response)  # Find leading number
-        return int(match.group(1)) if match else None
-
-    scores = [extract_score(response) for response in response_dict.values()]
-    valid_scores = [score for score in scores if score is not None]
-
-    total_score = round(sum(valid_scores) / len(valid_scores), 1) if valid_scores else "N/A"
-    response_dict["Total Score"] = str(total_score)
-
-    return jsonify(response_dict)
+    """Handle user questions and get responses from AI advisors."""
+    data = request.json
+    idea = data.get("idea", "")
+    logging.info(f"Received business idea: {idea}")
+    
+    if not idea:
+        return jsonify({"error": "No business idea provided."}), 400
+    
+    responses = await asyncio.gather(*[get_response(role, f"{prompt}\n\nBusiness Idea: {idea}") for role, prompt in personas.items()])
+    return jsonify(responses), 200
 
 if __name__ == '__main__':
     port = int(os.getenv("PORT", 10000))  # Use Render's dynamic port
