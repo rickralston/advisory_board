@@ -49,7 +49,7 @@ def signup():
 
     # Sign up user
     try:
-    user = supabase.auth.sign_up(email=email, password=password)
+        user = supabase.auth.sign_up(email=email, password=password)
     return jsonify({"message": "User created successfully", "user_id": user.user.id}), 201
 except Exception as e:
     logging.error(f"Signup error: {e}")
@@ -66,7 +66,7 @@ def login():
         return jsonify({"error": "Email and password required"}), 400
 
    try:
-    user = supabase.auth.sign_in_with_password(email=email, password=password)
+        user = supabase.auth.sign_in_with_password(email=email, password=password)
     if user and user.user:
         token = generate_jwt(user.user.id)
         return jsonify({"message": "Login successful", "token": token}), 200
