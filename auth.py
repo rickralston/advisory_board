@@ -57,7 +57,11 @@ def signup():
     # Sign up user
     try:
         user = supabase.auth.sign_up({"email": email, "password": password})
-        return jsonify({"message": "User created successfully", "user_id": user.user.id}), 201
+    
+    # Store user in the "users" table after successful signup
+        supabase.table("users").insert({"id": user.user.id, "email": email}).execute()
+
+    return jsonify({"message": "User created successfully", "user_id": user.user.id}), 201
     except Exception as e:
         logging.error(f"Signup error: {e}")
         return jsonify({"error": str(e)}), 500
