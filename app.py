@@ -1,6 +1,7 @@
 import os
 import asyncio
 import logging
+import bcrypt
 from flask import Flask, request, jsonify
 from flask_cors import CORS
 from flask_jwt_extended import JWTManager, jwt_required, create_access_token, get_jwt_identity
