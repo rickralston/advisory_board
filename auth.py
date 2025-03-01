@@ -1,79 +1,52 @@
-from flask import Blueprint, request, jsonify, session
-from supabase import create_client, Client
-from flask_login import LoginManager, UserMixin, login_user, login_required, logout_user, current_user
-import os
-from dotenv import load_dotenv
+from flask import Blueprint, request, jsonify
+from flask_login import LoginManager, UserMixin, login_user, logout_user, login_required
+import bcrypt
 
-# Load environment variables
-load_dotenv()
-
-# Initialize Flask Blueprint
 auth_bp = Blueprint("auth", __name__)
-
-# Connect to Supabase
-SUPABASE_URL = os.getenv("SUPABASE_URL")
-SUPABASE_KEY = os.getenv("SUPABASE_KEY")
-supabase: Client = create_client(SUPABASE_URL, SUPABASE_KEY)
-
-# Flask-Login setup
 login_manager = LoginManager()
-login_manager.login_view = "auth.login"
 
-# User model
+# Dummy database (replace with actual database)
+users_db = {}
+
 class User(UserMixin):
-    def __init__(self, user_id, email):
-        self.id = user_id
-        self.email = email
+    def __init__(self, id, username, password_hash):
+        self.id = id
+        self.username = username
+        self.password_hash = password_hash
 
 @login_manager.user_loader
 def load_user(user_id):
-    """Loads user from session"""
-    return User(user_id, session.get("email")) if "email" in session else None
+    return users_db.get(user_id)
 
-# Signup Route
 @auth_bp.route("/signup", methods=["POST"])
 def signup():
-    data = request.json
-    email = data.get("email")
+    data = request.get_json()
+    username = data.get("username")
     password = data.get("password")
 
-    try:
-        response = supabase.auth.sign_up({"email": email, "password": password})
-        return jsonify({"message": "Signup successful!"}), 201
-    except Exception as e:
-        return jsonify({"error": str(e)}), 400
+    if username in users_db:
+        return jsonify({"error": "User already exists"}), 400
 
-# Login Route
+    password_hash = bcrypt.hashpw(password.encode(), bcrypt.gensalt()).decode()
+    users_db[username] = User(username, username, password_hash)
+
+    return jsonify({"message": "User created successfully"}), 201
+
 @auth_bp.route("/login", methods=["POST"])
 def login():
-    data = request.json
-    email = data.get("email")
+    data = request.get_json()
+    username = data.get("username")
     password = data.get("password")
 
-    try:
-        response = supabase.auth.sign_in_with_password({"email": email, "password": password})
-        user_id = response.user.id
+    user = users_db.get(username)
+    if not user or not bcrypt.checkpw(password.encode(), user.password_hash.encode()):
+        return jsonify({"error": "Invalid username or password"}), 401
 
-        # Save session data
-        session["user_id"] = user_id
-        session["email"] = email
-        login_user(User(user_id, email))
+    login_user(user)
+    return jsonify({"message": "Login successful"}), 200
 
-        return jsonify({"message": "Login successful!"}), 200
-    except Exception as e:
-        return jsonify({"error": str(e)}), 400
-
-# Logout Route
 @auth_bp.route("/logout", methods=["POST"])
 @login_required
 def logout():
-    session.clear()
     logout_user()
-    return jsonify({"message": "Logged out successfully!"}), 200
-
-# Protected Route Example
-@auth_bp.route("/dashboard", methods=["GET"])
-@login_required
-def dashboard():
-    return jsonify({"message": f"Welcome {current_user.email}!"})
-
+    return jsonify({"message": "Logout successful"}), 200
