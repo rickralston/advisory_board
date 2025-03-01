@@ -4,3 +4,4 @@ flask-jwt-extended
 openai[async]
 supabase
 PyJWT
+gunicorn
