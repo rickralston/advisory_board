@@ -3,10 +3,9 @@ import logging
 import asyncio
 from flask import Flask, request, jsonify
 from flask_cors import CORS
-from openai import AsyncOpenAI
+from openai import AsyncOpenAI, OpenAIError
 
 app = Flask(__name__)
-
 CORS(app)
 
 # Configure logging
@@ -15,7 +14,9 @@ logging.basicConfig(level=logging.INFO, format="%(asctime)s - %(levelname)s - %(
 # Load API key
 OPENAI_API_KEY = os.getenv("OPENAI_API_KEY")
 if not OPENAI_API_KEY:
-    raise ValueError("Missing OpenAI API key. Set the OPENAI_API_KEY environment variable.")
+    logging.error("Missing OpenAI API key. Exiting...")
+    exit(1)
+
 client = AsyncOpenAI(api_key=OPENAI_API_KEY)
 
 # Define AI personas
@@ -45,29 +46,38 @@ async def ask():
             response = await client.chat.completions.create(
                 model="gpt-4o",
                 messages=messages,
-                max_tokens=300  # Limit response length
+                max_tokens=150 if "score" in prompt_intro.lower() else 300
             )
             return response.choices[0].message.content
+        except OpenAIError as e:
+            logging.error(f"OpenAI API error for {role}: {str(e)}")
+            return "API error occurred."
+        except ValueError:
+            logging.error(f"Value error parsing response for {role}.")
+            return "Error parsing response."
         except Exception as e:
-            logging.error(f"Error generating response for {role}: {str(e)}")
-            return "Error generating response."
+            logging.error(f"Unexpected error for {role}: {str(e)}")
+            return "An unexpected error occurred."
 
     # Gather responses from all personas
     responses = await asyncio.gather(*[get_response(role, prompt) for role, prompt in personas.items()])
     response_dict = dict(zip(personas.keys(), responses))
 
-    # Extract scores and calculate average
-    try:
-        scores = [int(response.split("\n")[0]) for response in response_dict.values()]
-        total_score = round(sum(scores) / len(scores), 1)  # Average with one decimal place
-    except Exception as e:
-        logging.error(f"Error calculating total score: {str(e)}")
-        total_score = "N/A"
+    # Extract scores and calculate average safely
+    scores = []
+    for response in response_dict.values():
+        try:
+            score = int(response.strip().split("\n")[0])
+            scores.append(score)
+        except (ValueError, IndexError):
+            logging.error(f"Invalid score format in response: {response}")
+            scores.append(0)  # Default to 0 if invalid
 
-    # Add total score to response
+    # Compute total score
+    total_score = round(sum(scores) / len(scores), 1) if scores else "N/A"
     response_dict["Total Score"] = str(total_score)
 
     return jsonify(response_dict)
 
 if __name__ == "__main__":
-    app.run(host="0.0.0.0", port=10000, debug=True)
+    app.run(host="0.0.0.0", port=int(os.getenv("PORT", 10000)), debug=True)
