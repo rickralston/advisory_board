@@ -4,8 +4,7 @@ import asyncio
 from flask import Flask, request, jsonify
 from flask_cors import CORS
 from openai import AsyncOpenAI, OpenAIError
-from flask_login import LoginManager
-from auth import auth_bp, login_manager
+from auth import auth_bp
 
 app = Flask(__name__)
 app.secret_key = "your-secret-key"
@@ -13,9 +12,6 @@ CORS(app)
 
 # Register Blueprint
 app.register_blueprint(auth_bp, url_prefix="/auth")
-
-# Initialize Flask-Login AFTER setting secret key
-login_manager.init_app(app)
 
 # Configure logging
 logging.basicConfig(level=logging.INFO, format="%(asctime)s - %(levelname)s - %(message)s")
