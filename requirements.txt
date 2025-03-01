@@ -1,5 +1,6 @@
 flask[async]
 flask-cors
+flask-jwt-extended
 openai[async]
 supabase
 PyJWT
