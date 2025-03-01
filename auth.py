@@ -38,11 +38,16 @@ def generate_jwt(user_id):
 def signup():
     """User signup using Supabase Auth"""
     data = request.get_json()
-    email = data.get("email")
-    password = data.get("password")
+
+    email = data.get("email", "").strip().lower()  # Strip spaces and force lowercase
+    password = data.get("password", "").strip()
 
     if not email or not password:
         return jsonify({"error": "Email and password required"}), 400
+
+    # Validate email format
+    if "@" not in email or "." not in email:
+        return jsonify({"error": "Invalid email format"}), 400
 
     # Check if user already exists
     try:
