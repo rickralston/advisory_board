@@ -50,6 +50,26 @@ def token_required(f):
         return f(*args, **kwargs)
     return decorated_function
 
+@app.route("/debug-token", methods=["POST"])
+def debug_token():
+    token = request.json.get("token")  # Pass the token in the request body
+    if not token:
+        return jsonify({"error": "No token provided"}), 400
+
+    try:
+        decoded = jwt.decode(token, JWT_SECRET, algorithms=["HS256"])
+        server_time = datetime.utcnow()
+        token_exp_time = datetime.utcfromtimestamp(decoded["exp"])
+        return jsonify({
+            "server_time": server_time.isoformat(),
+            "token_expiration_time": token_exp_time.isoformat(),
+            "is_expired": server_time > token_exp_time
+        })
+    except jwt.ExpiredSignatureError:
+        return jsonify({"error": "Token expired"}), 401
+    except jwt.InvalidTokenError:
+        return jsonify({"error": "Invalid token"}), 401
+
 @app.route("/time", methods=["GET"])
 def get_server_time():
     return jsonify({"server_time": datetime.utcnow().isoformat()})
@@ -66,10 +86,14 @@ def login():
         return jsonify({"error": "Invalid credentials"}), 401
 
     # Generate a token valid for 1 hour
-    expiration = datetime.utcnow() + timedelta(hours=1)
-    token = jwt.encode({"user": username, "exp": expiration}, JWT_SECRET, algorithm="HS256")
+exp_time = datetime.utcnow() + timedelta(hours=1)  # Always use UTC
+token = jwt.encode({"exp": exp_time.timestamp()}, JWT_SECRET, algorithm="HS256")
 
-    return jsonify({"token": token})
+server_time = datetime.utcnow()  # Always use UTC
+token_exp_time = datetime.utcfromtimestamp(decoded["exp"])  # Convert exp to UTC
+
+if server_time > token_exp_time:
+    return jsonify({"error": "Token expired"}), 401
 
 # Define AI personas
 personas = {
