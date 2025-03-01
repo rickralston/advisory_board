@@ -90,7 +90,6 @@ def login():
     return jsonify(access_token=access_token), 200
 
 @app.route('/ask', methods=['POST'])
-@jwt_required()
 async def ask():
     """Handle user questions and get responses from AI advisors."""
     data = request.json
