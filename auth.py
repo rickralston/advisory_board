@@ -65,13 +65,12 @@ def login():
     if not email or not password:
         return jsonify({"error": "Email and password required"}), 400
 
-    try:
-        user = supabase.auth.sign_in_with_password({"email": email, "password": password})
-        token = generate_jwt(user.user.id)
-        return jsonify({"message": "Login successful", "token": token}), 200
-    except Exception as e:
-        logging.error(f"Login error: {e}")
-        return jsonify({"error": "Invalid credentials"}), 401
+   try:
+    user = supabase.auth.sign_up(email=email, password=password)
+    return jsonify({"message": "User created successfully", "user_id": user.user.id}), 201
+except Exception as e:
+    logging.error(f"Signup error: {e}")
+    return jsonify({"error": str(e)}), 500
 
 @auth_bp.route("/logout", methods=["POST"])
 def logout():
