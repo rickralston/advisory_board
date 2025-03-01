@@ -1,8 +1,11 @@
+flask
 flask[async]
 flask-cors
 flask-jwt-extended
+flask-login
 openai[async]
-supabase
+supabase-py
 PyJWT
 gunicorn
 bcrypt
+python-dotenv
